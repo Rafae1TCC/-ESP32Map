@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de ESP32</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js"
+        integrity="sha512-Gch3eVsdc+qexpSPzF9XxYV6aTfrBOSazZiPhNx2Xt+xIrPOTE6TCDXduwqMb8f+L8kDfjwdn8rabNHfaGMtrA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <main>
+        <h1>Ubicación de los ESP32</h1>
+        <div id="map"></div>
+        <div class="wrapper">
+            <h1 id="Main_heading"><b>MQTT Dashboard</b></h1>
+            <form id="connection-information-form">
+                <div class="form-group">
+                    <label for="host"><b>Hostname o IP y Puerto:</b></label>
+                    <input id="host" type="text" name="host" value="wss://teamrocket.serveminecraft.net:8883/mqtt">
+                </div>
+                <div class="form-group">
+                    <label for="topic_s"><b>Topic de suscripción:</b></label>
+                    <input id="topic_s" type="text" name="topic_s" value="/location/esp32/">
+                </div>
+                <div class="button-group">
+                    <input type="button" class="btn" onclick="startConnect()" value="Connect">
+                    <input type="button" class="btn" onclick="startDisconnect()" value="Disconnect">
+                </div>
+            </form>
+            <div id="messages">Message:</div>
+        </div>
+    </main>
+    
+    <script>
+        // Inicializar el mapa
+        var map = L.map('map').setView([19.4326, -99.1332], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Agregar un marcador en las coordenadas especificadas
+        var fixedMarker = L.marker([32.4352778, -116.6752778]).addTo(map)
+            .bindPopup("ESP32 Localizado en: UABC Valle de las Palmas")
+            .openPopup();
+
+        var marker = null; // Un solo marcador para la última ubicación recibida
+    
+        function startConnect() {
+            clientID = "clientID - " + parseInt(Math.random() * 100);
+            host = document.getElementById("host").value;
+    
+            document.getElementById("messages").innerHTML += "<span> Conectando a " + host + "</span><br>";
+            document.getElementById("messages").innerHTML += "<span> Usando el Client ID " + clientID + "</span><br>";
+    
+            client = new Paho.MQTT.Client(host, clientID);
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+            client.connect({ onSuccess: onConnect });
+        }
+    
+        function onConnect() {
+            topic = document.getElementById("topic_s").value;
+            document.getElementById("messages").innerHTML += "<span> Suscrito al topic " + topic + "</span><br>";
+            client.subscribe(topic);
+        }
+    
+        function onConnectionLost(responseObject) {
+            document.getElementById("messages").innerHTML += "<span> ERROR: Conexión perdida.</span><br>";
+            if (responseObject.errorMessage) {
+                document.getElementById("messages").innerHTML += "<span> ERROR: " + responseObject.errorMessage + "</span><br>";
+            }
+        }
+    
+        function onMessageArrived(message) {
+            console.log("Mensaje recibido: " + message.payloadString);
+            document.getElementById("messages").innerHTML += "<span> Topic: " + message.destinationName + " | Mensaje: " + message.payloadString + "</span><br>";
+            
+            try {
+                var data = JSON.parse(message.payloadString);
+                if (data.x && data.y) {
+                    updateMarker(parseFloat(data.x), parseFloat(data.y));
+                } else {
+                    console.error("JSON inválido: Falta 'x' o 'y'");
+                }
+            } catch (error) {
+                console.error("Error procesando JSON: ", error);
+            }
+        }
+    
+        function updateMarker(lat, lon) {
+            if (marker) {
+                marker.setLatLng([lat, lon]);
+            } else {
+                marker = L.marker([lat, lon]).addTo(map).bindPopup("Última ubicación recibida");
+            }
+        }
+    
+        function startDisconnect() {
+            client.disconnect();
+            document.getElementById("messages").innerHTML += "<span> Desconectado. </span><br>";
+        }
+    
+        function publishMessage() {
+            msg = document.getElementById("Message").value;
+            topic = document.getElementById("topic_p").value;
+            Message = new Paho.MQTT.Message(msg);
+            Message.destinationName = topic;
+            client.send(Message);
+            document.getElementById("messages").innerHTML += "<span> Mensaje enviado al topic " + topic + "</span><br>";
+        }
+    </script>
+</body>
+</html>
